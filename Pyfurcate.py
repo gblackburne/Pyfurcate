@@ -130,11 +130,10 @@ def hopf_dynamics_numba(x, y, t, C, G, a, w, F0, F0_w):
     nnodes = x.shape[0]
     ones_vector = np.ones(nnodes).reshape((1, nnodes))
 
-    deltaX = (x @ ones_vector).T - (x @ ones_vector)
-    deltaY = (y @ ones_vector).T - (y @ ones_vector)
-
-    IsynX = G * C * deltaX @ ones_vector.T
-    IsynY = G * C * deltaY @ ones_vector.T
+    # single matrix vector multiply for memory saving, avoids the NxN diference matrix
+    row_sum = C @ ones_vector.T
+    IsynX = G * (C @ x - row_sum * x)
+    IsynY = G * (C @ y - row_sum * y)
 
     x_dot = (a - x**2 - y**2) * x - w * y + IsynX + F0 * np.cos(t * F0_w)
     y_dot = (a - x**2 - y**2) * y + w * x + IsynY + F0 * np.sin(t * F0_w)
@@ -469,11 +468,10 @@ class HopfModel(nn.Module):
         return self.stim_onset <= t < self.stim_onset + self.stim_duration
     
     def hopf_dynamics_torch(self, x, y, t):
-        deltaX = (x @ self.ones_vector).T - (x @ self.ones_vector)
-        deltaY = (y @ self.ones_vector).T - (y @ self.ones_vector)
-
-        IsynX = self.G * self.GEC * deltaX @ self.ones_vector.T
-        IsynY = self.G * self.GEC * deltaY @ self.ones_vector.T
+        # single matrix vector multiply for memory saving, avoids the NxN diference matrix
+        row_sum = self.GEC.sum(1, keepdim=True)
+        IsynX = self.G * (self.GEC @ x - row_sum * x)
+        IsynY = self.G * (self.GEC @ y - row_sum * y)
 
         F0 = self._current_F0
         x_dot = (self.a - x**2 - y**2) * x - self.w * y + IsynX + F0 * torch.cos(t * self.F0_w)
